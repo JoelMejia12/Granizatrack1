@@ -2,18 +2,28 @@ import { useState } from "react";
 import { Usuario } from "../lib/supabase";
 import { Mapa } from "./Mapa";
 import { Rutas } from "./Rutas";
-import { Ventas } from "./Ventas";
+import { Usuarios } from "./Usuarios";
+import { Carretillas } from "./Carretillas";
+import { Asignaciones } from "./Asignaciones";
+import { Productos } from "./Productos";
+import { VentasAdmin } from "./VentasAdmin";
 import { Reportes } from "./Reportes";
 
 const TABS = [
   { k: "mapa", label: "🗺️ Mapa" },
   { k: "rutas", label: "📍 Rutas" },
+  { k: "usuarios", label: "👥 Usuarios" },
+  { k: "carretillas", label: "🚚 Carretillas" },
+  { k: "asignaciones", label: "🔗 Asignaciones" },
+  { k: "productos", label: "📦 Productos" },
   { k: "ventas", label: "💰 Ventas" },
   { k: "reportes", label: "📊 Reportes" },
 ] as const;
 
+type TabKey = typeof TABS[number]["k"];
+
 export function Admin({ usuario, onSignOut }: { usuario: Usuario; onSignOut: () => void }) {
-  const [tab, setTab] = useState<typeof TABS[number]["k"]>("mapa");
+  const [tab, setTab] = useState<TabKey>("mapa");
 
   return (
     <div className="min-h-screen bg-[#FDF7FA]">
@@ -35,7 +45,11 @@ export function Admin({ usuario, onSignOut }: { usuario: Usuario; onSignOut: () 
       <main className="p-4 max-w-7xl mx-auto">
         {tab === "mapa" && <Mapa />}
         {tab === "rutas" && <Rutas />}
-        {tab === "ventas" && <Ventas usuario={usuario} jornadaActiva={null} />}
+        {tab === "usuarios" && <Usuarios />}
+        {tab === "carretillas" && <Carretillas />}
+        {tab === "asignaciones" && <Asignaciones />}
+        {tab === "productos" && <Productos />}
+        {tab === "ventas" && <VentasAdmin />}
         {tab === "reportes" && <Reportes />}
       </main>
     </div>

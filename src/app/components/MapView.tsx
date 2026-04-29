@@ -1,11 +1,8 @@
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from "react-leaflet";
-import { Fragment, useEffect } from "react";
-
-const FragmentWithKey = Fragment as any;
+import { useEffect, ReactNode } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Fix default marker icons in bundlers
 const DefaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -38,52 +35,70 @@ function FitBounds({ items }: { items: RutaItem[] }) {
   return null;
 }
 
-export function MapView({ rutas, height = "100%" }: { rutas: RutaItem[]; height?: string }) {
-  const center: [number, number] = rutas[0]?.puntos[0] ?? [-12.0464, -77.0428];
+export function MapView({
+  rutas,
+  height = "100%",
+  fallbackCenter = [15.7835, -90.2308],
+  fallbackZoom = 7,
+}: {
+  rutas: RutaItem[];
+  height?: string;
+  fallbackCenter?: [number, number];
+  fallbackZoom?: number;
+}) {
+  const firstPoint = rutas.find((r) => r.puntos.length > 0)?.puntos[0];
+  const center: [number, number] = firstPoint ?? fallbackCenter;
+  const zoom = firstPoint ? 13 : fallbackZoom;
+
+  const layers: ReactNode[] = [];
+  rutas.forEach((r) => {
+    const start = r.puntos[0];
+    const end = r.puntos[r.puntos.length - 1];
+    if (r.puntos.length > 1) {
+      layers.push(
+        <Polyline key={`p-${r.id}`} positions={r.puntos} pathOptions={{ color: r.color, weight: 4 }} />
+      );
+    }
+    if (start) {
+      layers.push(
+        <Marker key={`s-${r.id}`} position={start}>
+          <Popup>
+            <strong>Inicio</strong>
+            <br />
+            {r.carretillaCodigo} — {r.trabajadorNombre}
+            <br />
+            {r.horaInicio ? new Date(r.horaInicio).toLocaleString() : ""}
+          </Popup>
+        </Marker>
+      );
+    }
+    if (end && end !== start) {
+      layers.push(
+        <Marker key={`e-${r.id}`} position={end}>
+          <Popup>
+            <strong>{r.estado === "activa" ? "Posición actual" : "Final"}</strong>
+            <br />
+            {r.carretillaCodigo} — {r.trabajadorNombre}
+            <br />
+            {r.estado === "activa"
+              ? "Jornada activa"
+              : r.horaFin
+              ? `Finalizada: ${new Date(r.horaFin).toLocaleString()}`
+              : ""}
+          </Popup>
+        </Marker>
+      );
+    }
+  });
+
   return (
     <div style={{ height, minHeight: 400 }} className="rounded-2xl overflow-hidden border border-gray-200">
-      <MapContainer center={center} zoom={13} style={{ height: "100%", width: "100%" }}>
+      <MapContainer center={center} zoom={zoom} style={{ height: "100%", width: "100%" }}>
         <TileLayer
           attribution='&copy; OpenStreetMap'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {rutas.map((r) => {
-          const start = r.puntos[0];
-          const end = r.puntos[r.puntos.length - 1];
-          return (
-            <FragmentWithKey key={r.id}>
-              {r.puntos.length > 1 && (
-                <Polyline positions={r.puntos} pathOptions={{ color: r.color, weight: 4 }} />
-              )}
-              {start && (
-                <Marker position={start}>
-                  <Popup>
-                    <strong>Inicio</strong>
-                    <br />
-                    {r.carretillaCodigo} — {r.trabajadorNombre}
-                    <br />
-                    {r.horaInicio ? new Date(r.horaInicio).toLocaleString() : ""}
-                  </Popup>
-                </Marker>
-              )}
-              {end && end !== start && (
-                <Marker position={end}>
-                  <Popup>
-                    <strong>{r.estado === "activa" ? "Posición actual" : "Final"}</strong>
-                    <br />
-                    {r.carretillaCodigo} — {r.trabajadorNombre}
-                    <br />
-                    {r.estado === "activa"
-                      ? "Jornada activa"
-                      : r.horaFin
-                      ? `Finalizada: ${new Date(r.horaFin).toLocaleString()}`
-                      : ""}
-                  </Popup>
-                </Marker>
-              )}
-            </FragmentWithKey>
-          );
-        })}
+        {layers}
         <FitBounds items={rutas} />
       </MapContainer>
     </div>

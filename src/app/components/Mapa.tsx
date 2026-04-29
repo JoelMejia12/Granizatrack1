@@ -82,17 +82,14 @@ export function Mapa() {
         ))}
         <button onClick={cargar} className="ml-auto px-3 py-1.5 rounded-full text-sm bg-[#F8C8DC]">Actualizar</button>
       </div>
-      {loading ? (
-        <div className="text-center py-12 text-gray-500">Cargando...</div>
-      ) : rutas.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-gray-200">
+      {rutas.length === 0 && !loading && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-2xl text-sm">
           No hay jornadas activas en este momento
         </div>
-      ) : (
-        <div style={{ height: "calc(100vh - 220px)" }}>
-          <MapView rutas={visibles} />
-        </div>
       )}
+      <div style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+        <MapView rutas={visibles} fallbackCenter={[15.7835, -90.2308]} fallbackZoom={7} />
+      </div>
     </div>
   );
 }
