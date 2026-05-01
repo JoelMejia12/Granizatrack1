@@ -52,7 +52,7 @@ export default function App() {
         setUsuario(null);
         setError(!data
           ? "Tu cuenta no está registrada en la tabla usuarios."
-          : "Tu cuenta está desactivada.");
+          : "Tu usuario está inactivo. Contacta al administrador.");
         setStatus("login");
       } else {
         setUsuario(data as Usuario);

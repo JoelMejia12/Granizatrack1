@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
 
 type Venta = { id: string; trabajador_id: string; carretilla_id: string; jornada_id: string; total: number; nota: string | null; created_at: string };
 type Detalle = { id: string; venta_id: string; producto_id: string; cantidad: number; precio_unitario: number; subtotal: number };
@@ -91,17 +90,25 @@ export function Reportes() {
       const d = v.created_at.slice(0, 10);
       m[d] = (m[d] ?? 0) + Number(v.total);
     });
-    return Object.entries(m).map(([fecha, total]) => ({ fecha, total })).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    return Object.entries(m)
+      .map(([fecha, total]) => {
+        const [, mm, dd] = fecha.split("-");
+        return { fecha: `${dd}/${mm}`, total: Number(total.toFixed(2)) };
+      })
+      .sort((a, b) => a.fecha.localeCompare(b.fecha));
   }, [ventasFiltradas]);
 
+  const sinDatos = ventasFiltradas.length === 0;
+
   const exportCSV = () => {
+    const ordenadas = [...ventasFiltradas].sort((a, b) => b.created_at.localeCompare(a.created_at));
     const rows = [
-      ["fecha", "trabajador", "carretilla", "total", "nota"],
-      ...ventasFiltradas.map((v) => [
-        v.created_at,
+      ["Fecha", "Trabajador", "Carretilla", "Total", "Nota"],
+      ...ordenadas.map((v) => [
+        new Date(v.created_at).toLocaleString(),
         trabMap.get(v.trabajador_id) ?? v.trabajador_id,
         carrMap.get(v.carretilla_id) ?? v.carretilla_id,
-        String(v.total),
+        Number(v.total).toFixed(2),
         v.nota ?? "",
       ]),
     ];
@@ -172,27 +179,45 @@ export function Reportes() {
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
           <h3 className="font-medium mb-2">Ventas por producto</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={ventasPorProducto}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="total" fill="#AEE6F9" />
-            </BarChart>
-          </ResponsiveContainer>
+          {ventasPorProducto.length === 0 ? (
+            <div className="text-sm text-gray-500 py-12 text-center">Sin datos</div>
+          ) : (
+            <div className="space-y-2">
+              {(() => {
+                const max = Math.max(...ventasPorProducto.map((p) => p.total), 1);
+                return ventasPorProducto.map((p) => (
+                  <div key={p.name} className="text-sm">
+                    <div className="flex justify-between mb-1">
+                      <span className="truncate">{p.name}</span>
+                      <span className="text-gray-500">{p.total.toFixed(2)}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${(p.total / max) * 100}%`, backgroundColor: "#AEE6F9" }} />
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
         </div>
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
           <h3 className="font-medium mb-2">Ventas por día</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={ventasPorDia}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="fecha" />
-              <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="total" stroke="#db2777" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          {ventasPorDia.length === 0 ? (
+            <div className="text-sm text-gray-500 py-12 text-center">No hay ventas en el rango seleccionado</div>
+          ) : (
+            <div className="flex items-end justify-center gap-3 h-56 px-2 border-b border-l border-gray-200">
+              {(() => {
+                const max = Math.max(...ventasPorDia.map((v) => v.total), 1);
+                return ventasPorDia.map((v) => (
+                  <div key={v.fecha} className="flex flex-col items-center justify-end h-full" style={{ width: 40 }} title={`${v.fecha}: ${v.total.toFixed(2)}`}>
+                    <div className="text-[10px] text-gray-500 mb-1">{v.total.toFixed(0)}</div>
+                    <div className="w-full rounded-t" style={{ height: `${(v.total / max) * 90}%`, backgroundColor: "#AEE6F9", minHeight: v.total > 0 ? 2 : 0 }} />
+                    <div className="text-[10px] text-gray-500 mt-1 whitespace-nowrap">{v.fecha}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
         </div>
       </div>
 
@@ -217,7 +242,13 @@ export function Reportes() {
         </div>
       </div>
 
-      <button onClick={exportCSV} className="px-4 py-2 rounded-lg bg-[#F8C8DC]">Exportar CSV</button>
+      {sinDatos && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-2xl text-sm text-center">
+          No hay ventas en el rango seleccionado
+        </div>
+      )}
+
+      <button onClick={exportCSV} disabled={sinDatos} className="px-4 py-2 rounded-lg bg-[#F8C8DC] disabled:opacity-50 disabled:cursor-not-allowed">Exportar CSV</button>
     </div>
   );
 }

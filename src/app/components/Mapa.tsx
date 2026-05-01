@@ -45,6 +45,7 @@ export function Mapa() {
         id: j.id,
         color: colorForIndex(i),
         puntos,
+        timestamps: (ubis ?? []).map((u: any) => u.timestamp as string),
         carretillaCodigo: cMap.get(j.carretilla_id) ?? "—",
         trabajadorNombre: tMap.get(j.trabajador_id) ?? "—",
         estado: j.estado,

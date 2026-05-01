@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Usuario } from "../lib/supabase";
+import { Dashboard } from "./Dashboard";
 import { Mapa } from "./Mapa";
 import { Rutas } from "./Rutas";
 import { Usuarios } from "./Usuarios";
@@ -10,6 +11,7 @@ import { VentasAdmin } from "./VentasAdmin";
 import { Reportes } from "./Reportes";
 
 const TABS = [
+  { k: "dashboard", label: "🏠 Dashboard" },
   { k: "mapa", label: "🗺️ Mapa" },
   { k: "rutas", label: "📍 Rutas" },
   { k: "usuarios", label: "👥 Usuarios" },
@@ -23,7 +25,7 @@ const TABS = [
 type TabKey = typeof TABS[number]["k"];
 
 export function Admin({ usuario, onSignOut }: { usuario: Usuario; onSignOut: () => void }) {
-  const [tab, setTab] = useState<TabKey>("mapa");
+  const [tab, setTab] = useState<TabKey>("dashboard");
 
   return (
     <div className="min-h-screen bg-[#FDF7FA]">
@@ -43,6 +45,7 @@ export function Admin({ usuario, onSignOut }: { usuario: Usuario; onSignOut: () 
         ))}
       </nav>
       <main className="p-4 max-w-7xl mx-auto">
+        {tab === "dashboard" && <Dashboard />}
         {tab === "mapa" && <Mapa />}
         {tab === "rutas" && <Rutas />}
         {tab === "usuarios" && <Usuarios />}
