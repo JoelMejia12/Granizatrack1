@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import ExcelJS from "exceljs";
 
 type Venta = { id: string; trabajador_id: string; carretilla_id: string; jornada_id: string; total: number; nota: string | null; created_at: string };
 type Detalle = { id: string; venta_id: string; producto_id: string; cantidad: number; precio_unitario: number; subtotal: number };
@@ -100,27 +101,147 @@ export function Reportes() {
 
   const sinDatos = ventasFiltradas.length === 0;
 
-  const exportCSV = () => {
-    const ordenadas = [...ventasFiltradas].sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const rows = [
-      ["Fecha", "Trabajador", "Carretilla", "Total", "Nota"],
-      ...ordenadas.map((v) => [
-        new Date(v.created_at).toLocaleString(),
-        trabMap.get(v.trabajador_id) ?? v.trabajador_id,
-        carrMap.get(v.carretilla_id) ?? v.carretilla_id,
-        Number(v.total).toFixed(2),
-        v.nota ?? "",
-      ]),
+  const exportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "GranizaTrack";
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet("Reporte Ventas");
+
+    // ── Columnas ──────────────────────────────────────────────
+    sheet.columns = [
+      { header: "Fecha",           key: "fecha",          width: 14 },
+      { header: "Trabajador",      key: "trabajador",     width: 22 },
+      { header: "Carretilla",      key: "carretilla",     width: 14 },
+      { header: "Producto",        key: "producto",       width: 24 },
+      { header: "Cantidad",        key: "cantidad",       width: 11 },
+      { header: "Precio Unitario", key: "precio_unitario",width: 16 },
+      { header: "Total",           key: "total",          width: 14 },
+      { header: "Nota",            key: "nota",           width: 28 },
     ];
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+
+    // ── Estilo encabezados ────────────────────────────────────
+    const headerRow = sheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top:    { style: "thin", color: { argb: "FFAAAAAA" } },
+        left:   { style: "thin", color: { argb: "FFAAAAAA" } },
+        bottom: { style: "thin", color: { argb: "FFAAAAAA" } },
+        right:  { style: "thin", color: { argb: "FFAAAAAA" } },
+      };
+    });
+    headerRow.height = 20;
+
+    // ── Datos ─────────────────────────────────────────────────
+    const ordenadas = [...ventasFiltradas].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    let cantidadTotal = 0;
+
+    for (const v of ordenadas) {
+      const fecha = new Date(v.created_at);
+      const dd = String(fecha.getDate()).padStart(2, "0");
+      const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+      const yyyy = fecha.getFullYear();
+      const fechaStr = `${dd}/${mm}/${yyyy}`;
+
+      const ventaDetalles = detalles.filter((d) => d.venta_id === v.id);
+
+      if (ventaDetalles.length === 0) {
+        // venta sin detalle de producto
+        const row = sheet.addRow({
+          fecha:          fechaStr,
+          trabajador:     trabMap.get(v.trabajador_id) ?? v.trabajador_id,
+          carretilla:     carrMap.get(v.carretilla_id) ?? v.carretilla_id,
+          producto:       "—",
+          cantidad:       "",
+          precio_unitario:"",
+          total:          Number(v.total),
+          nota:           v.nota ?? "-",
+        });
+        styleDataRow(row);
+      } else {
+        for (const d of ventaDetalles) {
+          cantidadTotal += Number(d.cantidad);
+          const row = sheet.addRow({
+            fecha:          fechaStr,
+            trabajador:     trabMap.get(v.trabajador_id) ?? v.trabajador_id,
+            carretilla:     carrMap.get(v.carretilla_id) ?? v.carretilla_id,
+            producto:       productoMap.get(d.producto_id) ?? d.producto_id,
+            cantidad:       Number(d.cantidad),
+            precio_unitario:Number(d.precio_unitario),
+            total:          Number(d.subtotal),
+            nota:           v.nota ?? "-",
+          });
+          styleDataRow(row);
+        }
+      }
+    }
+
+    // ── Fila de resumen ───────────────────────────────────────
+    const lastDataRow = sheet.lastRow?.number ?? 1;
+    const summaryRow = sheet.addRow({
+      fecha:          "TOTALES",
+      trabajador:     "",
+      carretilla:     "",
+      producto:       "",
+      cantidad:       cantidadTotal,
+      precio_unitario:"",
+      total:          totalVendido,
+      nota:           "",
+    });
+    summaryRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true, size: 11, color: { argb: "FF1E3A8A" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F0FE" } };
+      cell.border = {
+        top:    { style: "medium", color: { argb: "FF1E3A8A" } },
+        left:   { style: "thin",   color: { argb: "FFAAAAAA" } },
+        bottom: { style: "thin",   color: { argb: "FFAAAAAA" } },
+        right:  { style: "thin",   color: { argb: "FFAAAAAA" } },
+      };
+      if (colNumber === 6 || colNumber === 7) {
+        cell.numFmt = '"Q"#,##0.00';
+        cell.alignment = { horizontal: "right" };
+      } else if (colNumber === 5) {
+        cell.alignment = { horizontal: "right" };
+      } else {
+        cell.alignment = { horizontal: "left" };
+      }
+    });
+    summaryRow.height = 20;
+
+    // ── Descargar ─────────────────────────────────────────────
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `reporte_${desde}_${hasta}.csv`;
+    a.download = "reporte_ventas.xlsx";
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  function styleDataRow(row: ExcelJS.Row) {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.border = {
+        top:    { style: "thin", color: { argb: "FFDDDDDD" } },
+        left:   { style: "thin", color: { argb: "FFDDDDDD" } },
+        bottom: { style: "thin", color: { argb: "FFDDDDDD" } },
+        right:  { style: "thin", color: { argb: "FFDDDDDD" } },
+      };
+      cell.font = { size: 10 };
+      if (colNumber === 6 || colNumber === 7) {
+        cell.numFmt = '"Q"#,##0.00';
+        cell.alignment = { horizontal: "right" };
+      } else if (colNumber === 5) {
+        cell.alignment = { horizontal: "right" };
+      } else {
+        cell.alignment = { horizontal: "left", wrapText: false };
+      }
+    });
+    row.height = 16;
+  }
 
   return (
     <div className="space-y-4">
@@ -248,7 +369,7 @@ export function Reportes() {
         </div>
       )}
 
-      <button onClick={exportCSV} disabled={sinDatos} className="px-4 py-2 rounded-lg bg-[#F8C8DC] disabled:opacity-50 disabled:cursor-not-allowed">Exportar CSV</button>
+      <button onClick={exportExcel} disabled={sinDatos} className="px-4 py-2 rounded-lg bg-[#F8C8DC] disabled:opacity-50 disabled:cursor-not-allowed">Exportar reporte</button>
     </div>
   );
 }
