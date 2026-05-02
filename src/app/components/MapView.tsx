@@ -3,7 +3,7 @@
  *
  * - Dibuja todas las rutas con Polyline completa (todos los puntos GPS)
  * - Marcadores de inicio (verde) y fin (rojo) con popups
- * - Círculos pequeños en cada punto GPS intermedio
+ * - Círculos pequeños en cada punto GPS intermedio con popup de hora
  * - Simplificación visual automática cuando hay >2000 puntos
  */
 
@@ -76,29 +76,22 @@ export type RutaItem = {
   horaFin?: string | null;
 };
 
-/* ─── Simplificación de puntos (Nth-point + extremos fijos) ─────────── */
+/* ─── Tipo par punto+timestamp ──────────────────────────────────────── */
+type PtTs = { pt: [number, number]; ts?: string };
+
+/* ─── Simplificación genérica Nth-point + extremos fijos ───────────── */
 const MAX_VISUAL_POINTS = 600;
 
-/**
- * Reduce un array de puntos a un máximo de `maxPts` puntos
- * distribuidos uniformemente, manteniendo siempre el primero y el último.
- * Se usa para rutas con >2000 puntos para no saturar el render del mapa.
- */
-function simplifyNth(
-  pts: [number, number][],
-  maxPts: number
-): [number, number][] {
-  const n = pts.length;
-  if (n <= maxPts) return pts;
-
-  const result: [number, number][] = [pts[0]];
-  // Distribuir (maxPts-2) puntos intermedios uniformemente
+function simplifyNth<T>(arr: T[], maxPts: number): T[] {
+  const n = arr.length;
+  if (n <= maxPts) return arr;
+  const result: T[] = [arr[0]];
   const inner = maxPts - 2;
   const step  = (n - 2) / inner;
   for (let i = 0; i < inner; i++) {
-    result.push(pts[Math.round(1 + i * step)]);
+    result.push(arr[Math.round(1 + i * step)]);
   }
-  result.push(pts[n - 1]);
+  result.push(arr[n - 1]);
   return result;
 }
 
@@ -112,7 +105,6 @@ function FitBounds({ items }: { items: RutaItem[] }) {
       L.latLngBounds(all.map((p) => L.latLng(p[0], p[1]))),
       { padding: [30, 30] }
     );
-  // Solo re-ajustar cuando cambia la lista de IDs, no en cada re-render
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(items.map((r) => r.id + r.puntos.length)), map]);
   return null;
@@ -125,6 +117,15 @@ function fmtHora(ts?: string): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+  });
+}
+
+function fmtFecha(ts?: string): string {
+  if (!ts) return "";
+  return new Date(ts).toLocaleDateString("es-GT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 }
 
@@ -144,11 +145,21 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
   const tsEnd      = r.timestamps?.[n - 1];
 
   // ── Simplificación visual si hay >2000 puntos ──────────────────────
-  const isHeavy       = n > 2_000;
-  const visualPoints  = isHeavy ? simplifyNth(r.puntos, MAX_VISUAL_POINTS) : r.puntos;
-  const circlePoints  = isHeavy ? simplifyNth(r.puntos, 300) : r.puntos;
-  // Reducir radio de círculos cuando hay muchos puntos
-  const circleRadius  = isHeavy ? 2 : 2.5;
+  const isHeavy      = n > 2_000;
+  const visualPoints = isHeavy
+    ? simplifyNth(r.puntos, MAX_VISUAL_POINTS)
+    : r.puntos;
+
+  // Array pareado {pt, ts} para los círculos intermedios (con timestamps)
+  const allPaired: PtTs[] = r.puntos.map((pt, i) => ({
+    pt,
+    ts: r.timestamps?.[i],
+  }));
+  const circlePaired: PtTs[] = isHeavy
+    ? simplifyNth(allPaired, 300)
+    : allPaired;
+
+  const circleRadius = isHeavy ? 2 : 2.5;
 
   return (
     <>
@@ -165,11 +176,11 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
         />
       )}
 
-      {/* ── Pequeños círculos en cada punto GPS ── */}
-      {circlePoints.map((p, i) => (
+      {/* ── Pequeños círculos en cada punto GPS con popup de hora ── */}
+      {circlePaired.map(({ pt, ts }, i) => (
         <CircleMarker
           key={`cm-${r.id}-${i}`}
-          center={p}
+          center={pt}
           radius={circleRadius}
           pathOptions={{
             color:       r.color,
@@ -178,7 +189,23 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
             fillColor:   "#93c5fd",
             fillOpacity: 0.7,
           }}
-        />
+        >
+          <Popup minWidth={180} autoPan={false}>
+            <div style={{ lineHeight: "1.7", fontSize: "0.9em" }}>
+              <span style={{ fontSize: "0.82em", color: "#888" }}>
+                📅 {fmtFecha(ts)}
+              </span>
+              <br />
+              <span>
+                🕐 <b style={{ fontSize: "1.05em" }}>Hora: {fmtHora(ts)}</b>
+              </span>
+              <br />
+              <span style={{ fontSize: "0.76em", color: "#666", fontFamily: "monospace" }}>
+                📍 {fmtCoords(pt)}
+              </span>
+            </div>
+          </Popup>
+        </CircleMarker>
       ))}
 
       {/* ── Marcador INICIO (verde) ── */}
@@ -188,6 +215,10 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
             <strong style={{ color: "#16a34a", fontSize: "0.94em" }}>
               🟢 Inicio de jornada
             </strong>
+            <br />
+            <span style={{ fontSize: "0.82em", color: "#888" }}>
+              📅 {fmtFecha(tsStart)}
+            </span>
             <br />
             <span style={{ fontSize: "0.88em" }}>
               🕐 <b>{fmtHora(tsStart)}</b>
@@ -211,12 +242,16 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
             <div style={{ lineHeight: "1.65" }}>
               <strong
                 style={{
-                  color:     r.estado === "activa" ? "#2563eb" : "#dc2626",
-                  fontSize:  "0.94em",
+                  color:    r.estado === "activa" ? "#2563eb" : "#dc2626",
+                  fontSize: "0.94em",
                 }}
               >
                 {r.estado === "activa" ? "🔵 Posición actual" : "🔴 Fin de jornada"}
               </strong>
+              <br />
+              <span style={{ fontSize: "0.82em", color: "#888" }}>
+                📅 {fmtFecha(tsEnd)}
+              </span>
               <br />
               <span style={{ fontSize: "0.88em" }}>
                 🕐 <b>{fmtHora(tsEnd)}</b>
@@ -234,12 +269,7 @@ const RutaLayer = memo(function RutaLayer({ r }: { r: RutaItem }) {
         </Marker>
       )}
 
-      {/* ── Aviso si la ruta fue simplificada visualmente ── */}
-      {isHeavy && (
-        /* Leaflet no soporta elementos React nativos fuera de capas;
-           el aviso se muestra como banner encima del mapa desde MapView */
-        <></>
-      )}
+      {isHeavy && <></>}
     </>
   );
 });
@@ -301,7 +331,7 @@ export function MapView({
 
 /* ─── Paleta de colores ─────────────────────────────────────────────── */
 const PALETTE = [
-  "#3b82f6",  // azul principal
+  "#3b82f6",
   "#db2777",
   "#7c3aed",
   "#16a34a",
